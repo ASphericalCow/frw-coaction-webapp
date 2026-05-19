@@ -1,0 +1,240 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #f8fafc;
+  color: #1e293b;
+  min-height: 100vh;
+}
+
+.app { max-width: 2400px; width: 100%; margin: 0 auto; padding: 1.5rem 0.5rem; min-width: 0; }
+
+.app-header { text-align: center; margin-bottom: 1rem; }
+.app-header h1 { font-size: 1.8rem; font-weight: 700; color: #0f172a; }
+.app-header .katex-display { margin: 0.5rem 0 0; color: #1e293b; }
+.app-citation { font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; }
+.app-citation a { color: #3b82f6; text-decoration: none; }
+.app-citation a:hover { text-decoration: underline; }
+.app-instructions { margin-top: 0.6rem; font-size: 0.9rem; color: #64748b; }
+
+.examples { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.example-btn {
+  background: #ffffff; border: 1px solid #cbd5e1; color: #475569;
+  padding: 0.35rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+}
+.example-btn:hover { background: #f1f5f9; color: #1e293b; }
+
+/* Three-editor row */
+.editors-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  align-items: start;
+  margin: 0 auto 1rem;
+  width: 100%;
+}
+
+.editor-panel { display: flex; flex-direction: column; gap: 0.25rem; }
+.hint { font-size: 0.78rem; color: #94a3b8; display: flex; flex-direction: column; gap: 0; margin-top: 0.25rem; align-items: center; text-align: center; }
+
+.graph-editor {
+  background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;
+  display: block; cursor: crosshair;
+}
+
+/* Decoration editor */
+.dec-editor { display: flex; flex-direction: column; gap: 0.25rem; }
+.dec-editor-header {
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: 2rem;
+}
+.dec-label { font-size: 1rem; font-weight: 600; color: #475569; }
+
+.badge {
+  font-size: 0.72rem; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 600;
+}
+.badge-ok { background: #dcfce7; color: #166534; }
+.badge-err { background: #fee2e2; color: #991b1b; }
+
+.graph-mini-editor {
+  background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; display: block;
+}
+
+.dec-legend { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.72rem; color: #94a3b8; align-items: center; text-align: center; }
+.broken-leg { color: #cbd5e1; }
+
+/* Zonotopes info bar */
+.zonotopes-display {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 0.5rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: #475569;
+  font-family: "Georgia", serif;
+  width: 100%; box-sizing: border-box;
+}
+.zono-sep { color: #cbd5e1; }
+.zono-sizes { color: #64748b; word-break: break-all; }
+.zonotopes-display strong { color: #1e293b; }
+
+/* Debug display */
+.debug-dec-block { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem; }
+.debug-region-label { font-size: 1rem; color: #64748b; min-width: 1.5rem; padding-top: 0.4rem; font-style: italic; }
+.debug-dec-sections { display: flex; flex-wrap: wrap; gap: 1.25rem; }
+.debug-dec-section { display: flex; flex-direction: column; gap: 0.25rem; }
+.debug-section-title { font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }
+.debug-region-svgs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.debug-region-item { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.debug-region-verts { font-size: 0.7rem; color: #94a3b8; }
+.debug-tube-order-row { display: flex; align-items: baseline; gap: 0.5rem; margin-top: 0.4rem; }
+.debug-tube-order-list { font-size: 0.9rem; font-family: monospace; color: #1e293b; letter-spacing: 0.05em; }
+.debug-cgh-list { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; font-size: 0.82rem; font-family: monospace; }
+.debug-cgh-pair { color: #1e293b; }
+.debug-cgh-zero { font-style: italic; color: #64748b; }
+.debug-tube-poly-list { display: flex; flex-direction: column; gap: 0.2rem; }
+.debug-tube-poly-row { font-size: 0.9rem; }
+.debug-cutval-block { margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 0.15rem; }
+
+/* Cut tubings display */
+.tubings-display {
+  background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;
+  width: 100%; box-sizing: border-box;
+  padding: 0.5rem 1rem; overflow-x: auto; overflow-y: auto;
+  max-height: 320px;
+}
+/* KaTeX display mode uses text-align:center, which causes wide formulas to overflow
+   the scroll container symmetrically (left + right). The left portion is behind the
+   scroll origin and unreachable. Force left-align so overflow is only rightward. */
+.tubings-display .katex-display {
+  text-align: left;
+}
+.tubings-grid {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+}
+.tubing-pair {
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.period-arrow {
+  font-size: 1.2rem; color: #94a3b8;
+}
+.tubing-label {
+  font-size: 0.72rem; color: #94a3b8; font-family: "Georgia", serif;
+}
+
+/* Toggle row (physical contour, physical form, etc.) */
+.toggle-row {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.8rem; color: #475569; cursor: pointer;
+  user-select: none; justify-content: center; margin-top: 0.1rem;
+}
+.toggle-row input[type="checkbox"] { cursor: pointer; accent-color: #3b82f6; }
+
+/* Compute row */
+.compute-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+
+.compute-btn {
+  padding: 0.6rem 1.5rem;
+  background: #3b82f6; border: none; border-radius: 8px; color: white;
+  font-size: 1rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.compute-btn:hover:not(:disabled) { background: #2563eb; }
+.compute-btn:disabled { opacity: 0.5; cursor: default; }
+
+.error {
+  padding: 0.4rem 0.7rem;
+  background: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px;
+  color: #991b1b; font-size: 0.85rem;
+}
+.stats { display: flex; gap: 1rem; font-size: 0.8rem; color: #94a3b8; }
+
+/* Results */
+.results-panel { min-height: 100px; }
+.empty-state { color: #94a3b8; font-size: 0.9rem; text-align: center; padding: 3rem 1rem; }
+
+/* Coaction display */
+.result-section { margin-bottom: 1.5rem; }
+.coaction-header { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.coaction-header h2 { font-family: "Georgia", serif; font-size: 1.3rem; color: #1e293b; white-space: nowrap; }
+.term-count { font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
+.section-note { font-size: 0.8rem; color: #64748b; font-style: italic; max-width: 36rem; }
+.period-sum-hover { cursor: pointer; border-radius: 6px; transition: background 0.15s; }
+.period-sum-hover:hover { background: #f1f5f9; }
+
+.legend { display: flex; gap: 1rem; font-size: 0.75rem; margin-bottom: 0.75rem; color: #94a3b8; }
+
+.terms-grid { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.2rem; align-items: flex-start; align-content: flex-start; }
+
+.term-row {
+  display: flex; align-items: flex-start; gap: 0.25rem;
+  background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.15rem 0.3rem;
+}
+
+/* Single-box mode: wrap terms-grid in this to get one bordered container */
+.terms-box {
+  background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  max-height: 520px; overflow-y: auto; overflow-x: auto;
+}
+.terms-box .terms-grid { gap: 0.4rem; }
+.terms-box .term-row {
+  background: transparent; border: none; border-radius: 0;
+}
+
+/* Coefficient display */
+.coeff { font-family: "Georgia", serif; color: #2563eb; min-width: 28px; text-align: center; align-self: center; }
+.coeff-sign { font-size: 1.1rem; margin-right: 0.2rem; }
+
+.coeff-fraction {
+  display: inline-flex; align-items: center; gap: 0.25rem; vertical-align: middle;
+}
+
+.fraction {
+  display: inline-flex; flex-direction: column; align-items: center;
+  font-size: 0.78rem; line-height: 1.2;
+}
+.frac-num { color: #2563eb; }
+.frac-bar {
+  width: 100%; height: 1px; background: #2563eb; margin: 1px 0;
+  min-width: 20px;
+}
+.frac-den { color: #2563eb; }
+
+.tensor-pair { display: flex; align-items: center; gap: 0.25rem; align-self: center; }
+.period-sum { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; }
+.period-sum-item { display: flex; align-items: center; gap: 0.25rem; }
+.period-plus { font-size: 1.1rem; color: #64748b; padding: 0 0.1rem; }
+.period-brace { font-size: 2rem; color: #64748b; line-height: 1; align-self: center; }
+.period-sum-wrapper { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.period-latex {
+  font-size: 0.78rem; color: #475569; text-align: center;
+  max-width: 260px; overflow-x: auto; padding: 0.1rem 0.25rem;
+}
+.tubings-display .period-latex {
+  margin-top: 0.4rem; font-size: 0.82rem; max-width: 100%;
+}
+.tensor-side { max-width: 600px; overflow-x: auto; }
+.otimes { font-size: 1.2rem; color: #94a3b8; padding: 0 0.1rem; }
+
+/* Letter display (HighlightGraph SVGs for dlog/Disc-log letters) */
+.letter-display { display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem; }
+.letter-diag { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 0.3rem; }
+.letter-diag-term { display: flex; align-items: center; gap: 0.2rem; }
+.letter-ratio { flex-direction: row; align-items: center; }
+.letter-coeff { display: flex; align-items: center; }
+.letter-dot { color: #475569; }
+.letter-paren { font-size: 2rem; color: #64748b; line-height: 1; align-self: center; }
+.letter-frac { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.letter-frac-bar { width: 100%; height: 2px; background: #475569; min-width: 24px; }
+.letter-plus { color: #64748b; padding: 0 0.15rem; }
+.letter-bracket-wrap { display: flex; align-items: stretch; }
+.letter-bracket-open {
+  border-left: 2.5px solid #475569; border-top: 2.5px solid #475569; border-bottom: 2.5px solid #475569;
+  border-radius: 4px 0 0 4px; width: 7px; flex-shrink: 0; margin-right: 3px;
+}
+.letter-bracket-close {
+  border-right: 2.5px solid #475569; border-top: 2.5px solid #475569; border-bottom: 2.5px solid #475569;
+  border-radius: 0 4px 4px 0; width: 7px; flex-shrink: 0; margin-left: 3px;
+}
+.graph-mini { display: block; border-radius: 4px; background: #f8fafc; }
+
+.pagination { display: flex; align-items: center; gap: 0.75rem; justify-content: center; margin-top: 1rem; font-size: 0.85rem; color: #64748b; }
+.pagination button { background: #ffffff; border: 1px solid #e2e8f0; color: #64748b; padding: 0.3rem 0.7rem; border-radius: 6px; cursor: pointer; }
+.pagination button:disabled { opacity: 0.4; cursor: default; }
