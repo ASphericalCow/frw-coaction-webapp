@@ -11,7 +11,7 @@
         text-anchor="middle"
         font-size="42"
         font-family="Georgia, 'Times New Roman', serif"
-        fill="#aaaaaa">⊗</text>
+        fill="black">⊗</text>
 
   <!-- Acyclic directed graph: T→BR, T→BL, BR→BL -->
   <!-- Nodes: T=(50,18)  BR=(84,76)  BL=(16,76)  r=8 -->

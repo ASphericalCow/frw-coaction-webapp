@@ -682,7 +682,10 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <p className="app-citation">Companion website for the FRW graphical coaction by A. McLeod, A. Pokraka, and L. Ren [<a href="https://arxiv.org/abs/2603.25703" target="_blank" rel="noreferrer">arXiv:2603.25703</a>]. Send comments to <a href="mailto:apokraka.physics@gmail.com">apokraka.physics@gmail.com</a>.</p>
-        <h1>FRW Graphical Coaction</h1>
+        <h1>
+          <img src="/favicon.svg" alt="" className="header-logo" />
+          FRW Graphical Coaction
+        </h1>
         <LatexFormula tex={
           physContour && physicalForm ? COACTION_PHYS_BOTH_FORMULA :
           physContour                 ? COACTION_PHYS_CONTOUR_FORMULA :

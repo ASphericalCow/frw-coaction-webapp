@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: frw-coaction-webapp
+    runtime: python
+    plan: free
+    buildCommand: bash build.sh
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"

@@ -10,7 +10,8 @@ body {
 .app { max-width: 2400px; width: 100%; margin: 0 auto; padding: 1.5rem 0.5rem; min-width: 0; }
 
 .app-header { text-align: center; margin-bottom: 1rem; }
-.app-header h1 { font-size: 1.8rem; font-weight: 700; color: #0f172a; }
+.app-header h1 { font-size: 1.8rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.header-logo { height: 3.6rem; width: auto; }
 .app-header .katex-display { margin: 0.5rem 0 0; color: #1e293b; }
 .app-citation { font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; }
 .app-citation a { color: #3b82f6; text-decoration: none; }
