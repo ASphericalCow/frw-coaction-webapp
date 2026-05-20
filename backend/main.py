@@ -1702,4 +1702,7 @@ if _SERVE_FRONTEND:
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):
+        file_path = os.path.join(_DIST, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
         return FileResponse(os.path.join(_DIST, "index.html"))
