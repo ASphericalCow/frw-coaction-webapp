@@ -278,20 +278,53 @@ function PeriodIntegralDisplay({ integralLatex, twistConsistent, regionConsisten
 }
 
 function ZonotopesDisplay({ result }) {
-  const { n_adec, n_zono, zono_sizes } = result;
+  const { n_adec, n_zono, zono_sizes, f_vectors, zono_svgs } = result;
+  const [showFvecs, setShowFvecs] = useState(false);
   return (
     <div className="zonotopes-display">
-      <span className="zono-stat">
-        |aDecGraphs| = <strong>{n_adec}</strong>
-      </span>
-      <span className="zono-sep">·</span>
-      <span className="zono-stat">
-        zonotopes = <strong>{n_zono}</strong>
-      </span>
-      <span className="zono-sep">·</span>
-      <span className="zono-stat zono-sizes">
-        |zonotope vertices| = &#123;{zono_sizes.join(", ")}&#125;
-      </span>
+      <div className="zono-summary">
+        <span className="zono-stat">
+          <span dangerouslySetInnerHTML={{ __html: renderTex("|\\mathrm{aDec}(\\mathcal{G})|", false) }} /> = <strong>{n_adec}</strong>
+        </span>
+        <span className="zono-sep">·</span>
+        <span className="zono-stat">
+          zonotopes = <strong>{n_zono}</strong>
+        </span>
+        <span className="zono-sep">·</span>
+        <span className="zono-stat zono-sizes">
+          |zonotope facets| = &#123;{zono_sizes.filter(s => s > 0).join(", ")}&#125;
+        </span>
+        <span className="zono-sep">·</span>
+        <button className="zono-toggle-btn" onClick={() => setShowFvecs(v => !v)}>
+          {showFvecs ? "Hide" : "Show"} zonotope f-vectors
+        </button>
+      </div>
+      {showFvecs && f_vectors && f_vectors.some(fv => fv.length > 0) && (
+        <div className="zono-fvec-table-wrap">
+          <table className="zono-fvec-table">
+            <thead>
+              <tr>
+                <th>zonotope</th>
+                <th>f-vector</th>
+                <th>total facets</th>
+              </tr>
+            </thead>
+            <tbody>
+              {f_vectors.map((fv, i) => fv.length === 0 ? null : (
+                <tr key={i}>
+                  <td>
+                    {zono_svgs?.[i]
+                      ? <img src={svgDataUri(zono_svgs[i])} alt={`zonotope ${i+1}`} className="zono-svg-thumb" />
+                      : i + 1}
+                  </td>
+                  <td className="zono-fvec-cell">&#123;{fv.join(", ")}&#125;</td>
+                  <td>{zono_sizes[i]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -468,12 +501,12 @@ export default function App() {
     fetch(`${API}/zonotopes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vertices: graph.vertices, edges: graph.edges }),
+      body: JSON.stringify({ vertices: graph.vertices, edges: graph.edges, positions: positionsToArray(positions) }),
     })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => { if (data && fetchId === zotopesFetchId.current) setZonotopesResult(data); })
       .catch(() => {});
-  }, [graph]);
+  }, [graph, positions]);
 
   // Auto-fetch cut tubings for γ whenever γ or φ changes and γ is acyclic
   const tubingsFetchId = useRef(0);
@@ -759,6 +792,10 @@ export default function App() {
         </div>
       </div>
 
+      {zonotopesResult && (
+        <ZonotopesDisplay result={zonotopesResult} />
+      )}
+
       {tubingsResult && gAcyclic && (
         <div className="result-section">
           <TubingsDisplay
@@ -793,10 +830,6 @@ export default function App() {
       )}
 
       {/* Debug panel hidden from UI; toggle showDebug to restore */}
-
-      {zonotopesResult && (
-        <ZonotopesDisplay result={zonotopesResult} />
-      )}
 
       <div className="compute-row">
         <button

@@ -1440,26 +1440,79 @@ def zonotopes(inp: GraphInput):
     edges = [frozenset(e) for e in inp.edges]
     vertices = list(inp.vertices)
 
-    # Count acyclic decorated graphs, binned by their broken-edge subset
+    # Collect acyclic decorated graphs, binned by their broken-edge subset
     adec_count = 0
-    broken_counts: dict = {}
+    broken_groups: dict = {}  # broken_key -> list of pinched-edge counts
     for dec in all_decorations(edges):
         if adec_q(dec, vertices):
             adec_count += 1
             broken_key = frozenset(e for e, t in dec if t == "broken")
-            broken_counts[broken_key] = broken_counts.get(broken_key, 0) + 1
+            pinched_count = sum(1 for e, t in dec if t == "pinched")
+            broken_groups.setdefault(broken_key, []).append(pinched_count)
 
     # Enumerate all 2^|E| broken-edge subsets, largest first (mirrors Wolfram Reverse[Subsets[]])
     edge_list = sorted(edges, key=sorted)
     n_e = len(edge_list)
+    n_v = len(vertices)
     all_broken_subs = []
     for r in range(n_e, -1, -1):
         for sub in combinations(range(n_e), r):
             all_broken_subs.append(frozenset(edge_list[i] for i in sub))
 
-    zono_sizes = [broken_counts.get(s, 0) for s in all_broken_subs]
+    zono_sizes = [len(broken_groups.get(s, [])) for s in all_broken_subs]
 
-    return {"n_adec": adec_count, "n_zono": len(all_broken_subs), "zono_sizes": zono_sizes}
+    def graph_rank(broken_sub):
+        """rank(H) = |V| - c(H) where H = G \ broken_sub."""
+        active_edges = [e for e in edges if e not in broken_sub]
+        parent = {v: v for v in vertices}
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+        for e in active_edges:
+            u, v = tuple(e)
+            pu, pv = find(u), find(v)
+            if pu != pv:
+                parent[pu] = pv
+        components = len({find(v) for v in vertices})
+        return n_v - components
+
+    def compute_fvec(pinched_counts, rank):
+        """f-vector: exact counts for k=0..rank-1, final bin for k>=rank."""
+        if not pinched_counts:
+            return []
+        bins = [pinched_counts.count(k) for k in range(rank)]
+        top = sum(1 for c in pinched_counts if c >= rank)
+        return bins + [top]
+
+    f_vectors = [
+        compute_fvec(broken_groups.get(s, []), graph_rank(s))
+        for s in all_broken_subs
+    ]
+
+    # SVG for each zonotope: broken edges as "broken", all others as "pinched"
+    positions_raw = _parse_positions(inp.positions)
+    coords = get_coords(inp.vertices, positions_raw, frozenset(map(frozenset, inp.edges)))
+    edges_raw = [sorted(list(e)) for e in edges]
+    tubes: list = []
+
+    zono_svgs = []
+    for broken_sub in all_broken_subs:
+        dec_list = [
+            {"edge": sorted(list(e)), "type": "broken" if e in broken_sub else "pinched"}
+            for e in edges
+        ]
+        svg = render_period_svg(inp.vertices, edges_raw, dec_list, tubes, [], coords)
+        zono_svgs.append(svg)
+
+    return {
+        "n_adec": adec_count,
+        "n_zono": len(all_broken_subs),
+        "zono_sizes": zono_sizes,
+        "f_vectors": f_vectors,
+        "zono_svgs": zono_svgs,
+    }
 
 
 def _render_regions(vertices, edges_raw, dec_dicts, coords):
