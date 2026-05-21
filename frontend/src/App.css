@@ -140,10 +140,12 @@ body {
 .compute-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
 
 .compute-btn {
-  padding: 0.6rem 1.5rem;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.25rem 1.5rem;
   background: #3b82f6; border: none; border-radius: 8px; color: white;
   font-size: 1rem; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
+.compute-btn-logo { height: 2.2rem; width: auto; filter: brightness(0) invert(1); flex-shrink: 0; }
 .compute-btn:hover:not(:disabled) { background: #2563eb; }
 .compute-btn:disabled { opacity: 0.5; cursor: default; }
 
@@ -180,7 +182,7 @@ body {
 .terms-box {
   background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;
   padding: 0.25rem 0.5rem;
-  max-height: 520px; overflow-y: auto; overflow-x: auto;
+  overflow-x: auto;
 }
 .terms-box .terms-grid { gap: 0.4rem; }
 .terms-box .term-row {

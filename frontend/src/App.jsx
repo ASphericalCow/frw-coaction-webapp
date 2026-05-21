@@ -376,6 +376,13 @@ const EXAMPLES = [
     g_dec: { "1-2": "pinched", "2-3": "pinched", "3-4": "pinched", "1-4": "pinched" },
     h_dec: { "1-2": "oriented_fwd", "2-3": "oriented_fwd", "3-4": "oriented_fwd", "1-4": "oriented_fwd" },
   },
+  {
+    name: "two-loop kite",
+    vertices: [1, 2, 3, 4],
+    edges: [[1, 2], [2, 3], [3, 4], [1, 4], [2, 4]],
+    g_dec: { "1-2": "pinched", "2-3": "pinched", "3-4": "pinched", "1-4": "pinched", "2-4": "pinched" },
+    h_dec: { "1-2": "oriented_fwd", "2-3": "oriented_fwd", "3-4": "oriented_fwd", "1-4": "oriented_fwd", "2-4": "oriented_fwd" },
+  },
 ];
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8001";
@@ -837,6 +844,7 @@ export default function App() {
           onClick={computeAnalyticStructure}
           disabled={loading || (!physContour && !gAcyclic) || (!physicalForm && !hAcyclic)}
         >
+          <img src="/favicon.svg" alt="" className="compute-btn-logo" />
           {loading ? "Computing…" : "Compute analytic structure"}
         </button>
         {error && <div className="error">{error}</div>}
