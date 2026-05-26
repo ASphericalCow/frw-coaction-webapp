@@ -24,3 +24,9 @@ frontend/node_modules/
 .vscode/
 .idea/
 *.sw?
+
+# Claude Code local config
+.claude/
+
+# Cold-start measurement output (script in cold_start_test.sh, results local-only)
+cold_start_results/
