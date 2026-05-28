@@ -17,6 +17,16 @@ function renderTex(tex, displayMode = true) {
   catch { return tex; }
 }
 
+/** Fire a GoatCounter custom event. No-op if the script is blocked/not loaded.
+ *  Analytics must never throw into the app. */
+function trackEvent(path, title) {
+  try {
+    if (window.goatcounter && typeof window.goatcounter.count === "function") {
+      window.goatcounter.count({ path, title: title || path, event: true });
+    }
+  } catch { /* ignore — analytics is best-effort */ }
+}
+
 /** P subscript: \mathcal{G} for physical contour/form, no comma needed. */
 function pSub(physContour, physForm) {
   const g = physContour ? "\\mathcal{G}" : "\\mathfrak{g}";
@@ -623,6 +633,11 @@ export default function App() {
       setError("Both decorations must be acyclic before computing.");
       return;
     }
+    const caseLabel = physContour && physicalForm ? "phys-phys"
+      : physContour ? "phys-h"
+      : physicalForm ? "g-phys"
+      : "g-h";
+    trackEvent(`compute-${caseLabel}`, `Compute: P(${caseLabel}), ${graph.vertices.length}v ${graph.edges.length}e`);
     setLoading(true);
     setError(null);
     setResultsStale(false);
@@ -704,6 +719,8 @@ export default function App() {
   }
 
   function loadExample(ex) {
+    const slug = ex.name.replace(/\s+/g, "-").toLowerCase();
+    trackEvent(`example-${slug}`, `Load example: ${ex.name}`);
     const newGraph = { vertices: ex.vertices, edges: ex.edges };
     setGraph(newGraph);
     setGDec(ex.g_dec);
