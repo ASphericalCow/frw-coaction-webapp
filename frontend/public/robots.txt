@@ -1,0 +1,16 @@
+# robots.txt for https://frwcoaction.ca
+# Allow crawling of the app; keep crawlers off the JSON/compute API endpoints.
+
+User-agent: *
+Disallow: /coaction
+Disallow: /coaction_phys
+Disallow: /coaction_phys_phys
+Disallow: /differential
+Disallow: /discontinuity
+Disallow: /discp_phys
+Disallow: /tubings
+Disallow: /zonotopes
+Disallow: /phi_phys_form
+Disallow: /period_pphys
+Disallow: /debug_period
+Disallow: /health
