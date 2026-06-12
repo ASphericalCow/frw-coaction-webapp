@@ -738,7 +738,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <p className="app-citation">Companion website for the FRW graphical coaction by A. McLeod, A. Pokraka, and L. Ren [<a href="https://arxiv.org/abs/2603.25703" target="_blank" rel="noreferrer">arXiv:2603.25703</a>, <a href="https://arxiv.org/abs/2606.13627v1" target="_blank" rel="noreferrer">arXiv:2606.13627</a>]. Send comments to <a href="mailto:apokraka.physics@gmail.com">apokraka.physics@gmail.com</a>.</p>
+        <p className="app-citation">Companion website for the FRW graphical coaction by A. McLeod, A. Pokraka, and L. Ren [long paper: <a href="https://arxiv.org/abs/2603.25703" target="_blank" rel="noreferrer">arXiv:2603.25703</a> / letter: <a href="https://arxiv.org/abs/2606.13627v1" target="_blank" rel="noreferrer">arXiv:2606.13627</a>]. Send comments to <a href="mailto:apokraka.physics@gmail.com">apokraka.physics@gmail.com</a>.</p>
         <h1>
           <img src="/favicon.svg" alt="" className="header-logo" />
           FRW Graphical Coaction
