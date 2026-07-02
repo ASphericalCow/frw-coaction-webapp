@@ -1,6 +1,7 @@
 /**
  * Reads the graph structure (vertices + edges) and lets the user click edges
  * to cycle through decoration types: oriented_fwd → oriented_rev → pinched → broken → oriented_fwd.
+ * Parallel edges are drawn as separate offset arcs, each independently clickable.
  *
  * Props:
  *   graph:              { vertices: [int], edges: [[u,v]] }
@@ -9,7 +10,7 @@
  *   isAcyclic:          bool | null  (null = not yet validated)
  *   label:              string
  */
-import { edgeKey } from "./graphUtils";
+import { edgeKey, withK, parallelOffsets, edgePathD, pointOnEdge } from "./graphUtils";
 
 const W = 330;
 const H = 220;
@@ -17,87 +18,63 @@ const R = 13;
 
 const CYCLE = ["oriented_fwd", "oriented_rev", "pinched", "broken"];
 
-function Arrow({ pu, pv, color }) {
-  const dx = pv.x - pu.x, dy = pv.y - pu.y;
-  const len = Math.sqrt(dx * dx + dy * dy) || 1;
-  const ux = dx / len, uy = dy / len;
-  const pnx = -uy, pny = ux;
-  // Line shortened at both ends to clear vertex circles
-  const x1 = pu.x + ux * R, y1 = pu.y + uy * R;
-  const x2 = pv.x - ux * R, y2 = pv.y - uy * R;
-  // Arrowhead tip at 60% along the edge
-  const mx = pu.x + dx * 0.6, my = pu.y + dy * 0.6;
+function Arrow({ pu, pv, off, color, dir }) {
+  const d = edgePathD(pu, pv, off);
+  const pt = pointOnEdge(pu, pv, off, 0.5);
+  let tx = pt.tx, ty = pt.ty;
+  if (dir === "rev") { tx = -tx; ty = -ty; }
+  const pnx = -ty, pny = tx;
   const hsize = 10;
-  const basex = mx - ux * hsize, basey = my - uy * hsize;
+  const tip = { x: pt.x + tx * hsize * 0.5, y: pt.y + ty * hsize * 0.5 };
+  const bx = pt.x - tx * hsize * 0.5, by = pt.y - ty * hsize * 0.5;
   return (
     <g>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={3} />
+      <path d={d} fill="none" stroke={color} strokeWidth={3} />
       <polygon
-        points={`${mx},${my} ${basex + pnx * hsize},${basey + pny * hsize} ${basex - pnx * hsize},${basey - pny * hsize}`}
+        points={`${tip.x},${tip.y} ${bx + pnx * hsize * 0.6},${by + pny * hsize * 0.6} ${bx - pnx * hsize * 0.6},${by - pny * hsize * 0.6}`}
         fill={color}
       />
     </g>
   );
 }
 
-function EdgeShape({ type, pu, pv, onClick }) {
+function EdgeShape({ type, pu, pv, off, onClick }) {
   const dx = pv.x - pu.x, dy = pv.y - pu.y;
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const nx = -dy / len, ny = dx / len;
+  const d = edgePathD(pu, pv, off);
 
-  // Invisible wide hit area
-  const hitLine = (
-    <line
-      x1={pu.x} y1={pu.y} x2={pv.x} y2={pv.y}
-      stroke="transparent" strokeWidth={18}
-      style={{ cursor: "pointer" }}
-      onClick={onClick}
-    />
+  const hit = (
+    <path d={d} fill="none" stroke="transparent" strokeWidth={18}
+          style={{ cursor: "pointer" }} onClick={onClick} />
   );
 
   if (type === "oriented_fwd") {
-    return (
-      <g>
-        <Arrow pu={pu} pv={pv} color="#334155" />
-        {hitLine}
-      </g>
-    );
+    return (<g><Arrow pu={pu} pv={pv} off={off} color="#334155" dir="fwd" />{hit}</g>);
   }
-
   if (type === "oriented_rev") {
-    return (
-      <g>
-        <Arrow pu={pv} pv={pu} color="#334155" />
-        {hitLine}
-      </g>
-    );
+    return (<g><Arrow pu={pu} pv={pv} off={off} color="#334155" dir="rev" />{hit}</g>);
   }
-
   if (type === "pinched") {
-    const off = 3;
+    const o = 3;
+    const d1 = edgePathD({ x: pu.x + nx * o, y: pu.y + ny * o }, { x: pv.x + nx * o, y: pv.y + ny * o }, off);
+    const d2 = edgePathD({ x: pu.x - nx * o, y: pu.y - ny * o }, { x: pv.x - nx * o, y: pv.y - ny * o }, off);
     return (
       <g>
-        <line x1={pu.x + nx * off} y1={pu.y + ny * off}
-              x2={pv.x + nx * off} y2={pv.y + ny * off}
-              stroke="#334155" strokeWidth={3} />
-        <line x1={pu.x - nx * off} y1={pu.y - ny * off}
-              x2={pv.x - nx * off} y2={pv.y - ny * off}
-              stroke="#334155" strokeWidth={3} />
-        {hitLine}
+        <path d={d1} fill="none" stroke="#334155" strokeWidth={3} />
+        <path d={d2} fill="none" stroke="#334155" strokeWidth={3} />
+        {hit}
       </g>
     );
   }
-
   if (type === "broken") {
     return (
       <g>
-        <line x1={pu.x} y1={pu.y} x2={pv.x} y2={pv.y}
-              stroke="#94a3b8" strokeWidth={3} strokeDasharray="4 3" />
-        {hitLine}
+        <path d={d} fill="none" stroke="#94a3b8" strokeWidth={3} strokeDasharray="4 3" />
+        {hit}
       </g>
     );
   }
-
   return null;
 }
 
@@ -109,8 +86,8 @@ export default function DecorationEditor({ graph, decoration, onDecorationChange
     if (p) pos[v] = { x: p.x * W, y: p.y * H };
   });
 
-  function cycleEdge(u, v) {
-    const key = edgeKey(u, v);
+  function cycleEdge(u, v, k) {
+    const key = edgeKey(u, v, k);
     const current = decoration[key] || "oriented_fwd";
     const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
     onDecorationChange({ ...decoration, [key]: next });
@@ -121,6 +98,8 @@ export default function DecorationEditor({ graph, decoration, onDecorationChange
       ? <span className="badge badge-ok">✓ acyclic</span>
       : <span className="badge badge-err">✗ not acyclic</span>;
 
+  const offs = parallelOffsets(graph.edges);
+
   return (
     <div className="dec-editor">
       <div className="dec-editor-header">
@@ -128,18 +107,19 @@ export default function DecorationEditor({ graph, decoration, onDecorationChange
         {acyclicBadge}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ aspectRatio: `${W}/${H}` }} className="graph-mini-editor">
-        {!blank && graph.edges.map(([u, v]) => {
+        {!blank && withK(graph.edges).map(([u, v, k], i) => {
           const pu = pos[u], pv = pos[v];
           if (!pu || !pv) return null;
-          const key = edgeKey(u, v);
+          const key = edgeKey(u, v, k);
           const type = decoration[key] || "oriented_fwd";
           return (
             <EdgeShape
-              key={key}
+              key={key + "#" + i}
               type={type}
               pu={pu}
               pv={pv}
-              onClick={() => cycleEdge(u, v)}
+              off={offs[i]}
+              onClick={() => cycleEdge(u, v, k)}
             />
           );
         })}

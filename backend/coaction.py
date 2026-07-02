@@ -2,9 +2,14 @@
 Core combinatorial coaction algorithm for FRW integrals.
 Mirrors graphicalCosmoCoaction.nb.
 
-Graph representation:
+Graph representation (v3: supports parallel edges / loops):
   vertices: list of ints
-  edges:    list of frozensets of 2 ints
+  edges:    list of Edge objects.  An Edge is the frozenset {u, v} of its two
+            endpoints together with a parallel index k (1, 2, ...) that makes
+            multiple edges between the same pair distinct.  Because Edge
+            subclasses frozenset, every vertex operation (e & tv, e <= group,
+            iteration, sorted(e), unions) behaves exactly as before; only the
+            identity (hash/eq, so set/dict membership) is index-aware.
 
 Decoration types per edge:
   "oriented_fwd"  u→v  (u < v)
@@ -18,8 +23,64 @@ import networkx as nx
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Indexed edge type
 # ---------------------------------------------------------------------------
+
+class Edge(frozenset):
+    """Undirected edge {u, v} with a parallel-edge index k for identity."""
+    def __new__(cls, uv, k=1):
+        return super().__new__(cls, uv)
+
+    def __init__(self, uv, k=1):
+        self.k = k
+
+    def __hash__(self):
+        return hash((frozenset(self), self.k))
+
+    def __eq__(self, other):
+        if isinstance(other, Edge):
+            return self.k == other.k and frozenset(self) == frozenset(other)
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __reduce__(self):
+        return (Edge, (tuple(self), self.k))
+
+    def __repr__(self):
+        return f"Edge({sorted(self)}, k={self.k})"
+
+    def json(self):
+        u, v = sorted(self)
+        return [u, v, self.k]
+
+
+def _edge_sort_key(e):
+    """Deterministic order: by (sorted vertices, k)."""
+    return (sorted(e), getattr(e, "k", 1))
+
+
+def build_edges(edge_input):
+    """
+    Turn raw input into indexed Edge objects, assigning the parallel index k by
+    order of appearance within each vertex pair.  Accepts [u, v] or [u, v, k]
+    (an explicit k is honoured).  So [[1,2],[1,2]] (bubble) -> two Edges with
+    k = 1, 2; a simple graph gets all k = 1.
+    """
+    counts = {}
+    out = []
+    for e in edge_input:
+        u, v = sorted((e[0], e[1]))
+        if len(e) >= 3 and e[2]:
+            k = e[2]
+            counts[(u, v)] = max(counts.get((u, v), 0), k)
+        else:
+            counts[(u, v)] = counts.get((u, v), 0) + 1
+            k = counts[(u, v)]
+        out.append(Edge((u, v), k))
+    return out
+
 
 def powerset(iterable):
     s = list(iterable)
@@ -27,7 +88,7 @@ def powerset(iterable):
 
 
 def frozenedge(u, v):
-    return frozenset({u, v})
+    return Edge((u, v), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +106,7 @@ def all_tubes(vertices, edges):
     for v in sorted(vertices):
         tubes.append((frozenset({v}), frozenset()))
 
-    edge_list = sorted(edges, key=sorted)
+    edge_list = sorted(edges, key=_edge_sort_key)
     for r in range(1, len(edge_list) + 1):
         for subset in combinations(edge_list, r):
             touched = frozenset().union(*subset)
@@ -89,7 +150,7 @@ DECORATED_TYPES = ("oriented_fwd", "oriented_rev", "pinched", "broken")
 
 def all_decorations(edges):
     """Yield all 4^|E| decorations as tuples of (frozenset-edge, type)."""
-    edge_list = sorted(edges, key=sorted)
+    edge_list = sorted(edges, key=_edge_sort_key)
     for assignment in product(DECORATED_TYPES, repeat=len(edge_list)):
         yield tuple(zip(edge_list, assignment))
 
@@ -338,7 +399,7 @@ def pinch_list(dec):
         for i in subset:
             e, _ = new_dec[i]
             new_dec[i] = (e, "pinched")
-        variants.add(tuple(sorted(new_dec, key=lambda x: (sorted(x[0]), x[1]))))
+        variants.add(tuple(sorted(new_dec, key=lambda x: (_edge_sort_key(x[0]), x[1]))))
     return list(variants)
 
 
@@ -400,16 +461,23 @@ def parse_dec_input(dec_input, edges):
     Edges not present in dec_input default to "oriented_fwd".
     """
     dec_dict = {}
+    counts = {}
     for item in dec_input:
-        fe = frozenset(item["edge"])
-        dec_dict[fe] = item["type"]
+        e = item["edge"]
+        u, v = sorted((e[0], e[1]))
+        if len(e) >= 3 and e[2]:
+            k = e[2]
+        else:
+            counts[(u, v)] = counts.get((u, v), 0) + 1
+            k = counts[(u, v)]
+        dec_dict[Edge((u, v), k)] = item["type"]
 
-    edge_list = sorted(edges, key=sorted)
+    edge_list = sorted(edges, key=_edge_sort_key)
     result = []
     for fe in edge_list:
         t = dec_dict.get(fe, "oriented_fwd")
         result.append((fe, t))
-    return tuple(sorted(result, key=lambda x: (sorted(x[0]), x[1])))
+    return tuple(sorted(result, key=lambda x: (_edge_sort_key(x[0]), x[1])))
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +498,7 @@ def compute_dp(vertices, edges, g_dec_input, h_dec_input):
 
     Coefficient: 1/intNum(f) = Π_{pinched components R} (Π_{v∈R} α_v)/(Σ_{v∈R} α_v)
     """
-    edges = [frozenset(e) for e in edges]
+    edges = build_edges(edges)
     vertices = list(vertices)
 
     g_dec = parse_dec_input(g_dec_input, edges)
@@ -505,13 +573,13 @@ def compute_dp(vertices, edges, g_dec_input, h_dec_input):
         })
 
     tubes_json = [
-        {"verts": sorted(tv), "edges": [sorted(te) for te in tes]}
+        {"verts": sorted(tv), "edges": [te.json() for te in sorted(tes, key=_edge_sort_key)]}
         for tv, tes in tubes
     ]
 
     return {
         "vertices": vertices,
-        "edges": [sorted(e) for e in edges],
+        "edges": [e.json() for e in edges],
         "tubes": tubes_json,
         "g_dec": dec_to_json(g_dec),
         "h_dec": dec_to_json(h_dec),
@@ -530,7 +598,7 @@ def compute_tubings(vertices, edges, dec_input):
 
     Returns dict with vertices, edges, tubes, dec, cut_tubings, n_regions.
     """
-    edges = [frozenset(e) for e in edges]
+    edges = build_edges(edges)
     vertices = list(vertices)
 
     dec = parse_dec_input(dec_input, edges)
@@ -548,13 +616,13 @@ def compute_tubings(vertices, edges, dec_input):
     signs = [cut_tubing_sign(ct, dec, vertices, tubes) for ct in ncct]
 
     tubes_json = [
-        {"verts": sorted(tv), "edges": [sorted(te) for te in tes]}
+        {"verts": sorted(tv), "edges": [te.json() for te in sorted(tes, key=_edge_sort_key)]}
         for tv, tes in tubes
     ]
 
     return {
         "vertices": vertices,
-        "edges": [sorted(e) for e in edges],
+        "edges": [e.json() for e in edges],
         "tubes": tubes_json,
         "dec": dec_to_json(dec),
         "cut_tubings": ncct,
@@ -573,7 +641,7 @@ def compute_dp_phys(vertices, edges, g_dec_input):
     P(g,f) ≠ 0 iff tubes(g) ⊆ tubes(f).
     P(f, φ_phys) is represented as cut tubings of f on the bare (undirected) graph.
     """
-    edges = [frozenset(e) for e in edges]
+    edges = build_edges(edges)
     vertices = list(vertices)
 
     g_dec = parse_dec_input(g_dec_input, edges)
@@ -632,13 +700,13 @@ def compute_dp_phys(vertices, edges, g_dec_input):
         })
 
     tubes_json = [
-        {"verts": sorted(tv), "edges": [sorted(te) for te in tes]}
+        {"verts": sorted(tv), "edges": [te.json() for te in sorted(tes, key=_edge_sort_key)]}
         for tv, tes in tubes
     ]
 
     return {
         "vertices": vertices,
-        "edges": [sorted(e) for e in edges],
+        "edges": [e.json() for e in edges],
         "tubes": tubes_json,
         "g_dec": dec_to_json(g_dec),
         "adec_count": len(adec_set),
@@ -647,7 +715,7 @@ def compute_dp_phys(vertices, edges, g_dec_input):
 
 
 def dec_to_json(dec):
-    return [{"edge": sorted(e), "type": t} for e, t in dec]
+    return [{"edge": e.json(), "type": t} for e, t in dec]
 
 
 def cgh(g_cut_tubings, h_cut_tubings):

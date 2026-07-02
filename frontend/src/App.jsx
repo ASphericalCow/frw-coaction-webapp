@@ -8,7 +8,7 @@ import TubingsDisplay, { PhiPhysDisplay } from "./TubingsDisplay";
 import AnalyticStructureDisplay from "./AnalyticStructureDisplay";
 import PgPhysLatex from "./PgPhysLatex";
 import { adecQ } from "./adecQ";
-import { edgeKey, svgDataUri } from "./graphUtils";
+import { edgeKey, withK, svgDataUri } from "./graphUtils";
 import "./App.css";
 
 /** Safe KaTeX render: returns HTML string; falls back to raw tex on error. */
@@ -465,23 +465,23 @@ function positionsToArray(positions) {
 
 function initDec(edges) {
   const dec = {};
-  edges.forEach(([u, v]) => { dec[edgeKey(u, v)] = "oriented_fwd"; });
+  withK(edges).forEach(([u, v, k]) => { dec[edgeKey(u, v, k)] = "oriented_fwd"; });
   return dec;
 }
 
 function syncDec(dec, newEdges) {
   const next = {};
-  newEdges.forEach(([u, v]) => {
-    const k = edgeKey(u, v);
-    next[k] = dec[k] || "oriented_fwd";
+  withK(newEdges).forEach(([u, v, k]) => {
+    const key = edgeKey(u, v, k);
+    next[key] = dec[key] || "oriented_fwd";
   });
   return next;
 }
 
 function decToList(dec, edges) {
-  return edges.map(([u, v]) => ({
-    edge: [u, v],
-    type: dec[edgeKey(u, v)] || "oriented_fwd",
+  return withK(edges).map(([u, v, k]) => ({
+    edge: [u, v, k],
+    type: dec[edgeKey(u, v, k)] || "oriented_fwd",
   }));
 }
 
@@ -537,7 +537,7 @@ export default function App() {
       positions: positionsToArray(positions),
     };
     if (physicalForm) {
-      body.h_dec = graph.edges.map(([u, v]) => ({ edge: [u, v], type: "solid" }));
+      body.h_dec = withK(graph.edges).map(([u, v, k]) => ({ edge: [u, v, k], type: "solid" }));
     } else if (hAcyclic) {
       body.h_dec = decToList(hDec, graph.edges);
     }

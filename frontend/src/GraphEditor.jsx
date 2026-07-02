@@ -6,7 +6,7 @@
  * Drag vertex → reposition.
  */
 import { useState, useRef, useCallback } from "react";
-import { edgeKey } from "./graphUtils";
+import { edgeKey, withK, parallelOffsets, edgePathD } from "./graphUtils";
 
 const R = 16;
 const W = 330;
@@ -55,11 +55,8 @@ export default function GraphEditor({ graph, onChange, positions, onPositionsCha
     } else if (selected === id) {
       setSelected(null);
     } else {
-      const key = edgeKey(selected, id);
-      const exists = graph.edges.some((ed) => edgeKey(ed[0], ed[1]) === key);
-      if (!exists) {
-        onChange({ vertices: graph.vertices, edges: [...graph.edges, [selected, id]] });
-      }
+      // v3: allow parallel edges (a second edge between the same two vertices)
+      onChange({ vertices: graph.vertices, edges: [...graph.edges, [selected, id]] });
       setSelected(null);
     }
   }
@@ -77,13 +74,13 @@ export default function GraphEditor({ graph, onChange, positions, onPositionsCha
     });
   }
 
-  function handleEdgeRightClick(e, u, v) {
+  function handleEdgeRightClick(e, index) {
+    // v3: delete this specific edge by index (so one of a parallel pair can go)
     e.preventDefault();
     e.stopPropagation();
-    const key = edgeKey(u, v);
     onChange({
       vertices: graph.vertices,
-      edges: graph.edges.filter((ed) => edgeKey(ed[0], ed[1]) !== key),
+      edges: graph.edges.filter((_, i) => i !== index),
     });
   }
 
@@ -120,23 +117,26 @@ export default function GraphEditor({ graph, onChange, positions, onPositionsCha
       onMouseUp={handleMouseUp}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {graph.edges.map(([u, v]) => {
-        const pu = pixPos[u];
-        const pv = pixPos[v];
-        if (!pu || !pv) return null;
-        return (
-          <line
-            key={edgeKey(u, v)}
-            x1={pu.x} y1={pu.y}
-            x2={pv.x} y2={pv.y}
-            stroke="#475569"
-            strokeWidth={3}
-            strokeLinecap="round"
-            style={{ cursor: "pointer" }}
-            onContextMenu={(e) => handleEdgeRightClick(e, u, v)}
-          />
-        );
-      })}
+      {(() => {
+        const offs = parallelOffsets(graph.edges);
+        return withK(graph.edges).map(([u, v, k], i) => {
+          const pu = pixPos[u];
+          const pv = pixPos[v];
+          if (!pu || !pv) return null;
+          return (
+            <path
+              key={edgeKey(u, v, k) + "#" + i}
+              d={edgePathD(pu, pv, offs[i])}
+              fill="none"
+              stroke="#475569"
+              strokeWidth={3}
+              strokeLinecap="round"
+              style={{ cursor: "pointer" }}
+              onContextMenu={(e) => handleEdgeRightClick(e, i)}
+            />
+          );
+        });
+      })()}
 
       {graph.vertices.map((id) => {
         const p = pixPos[id];

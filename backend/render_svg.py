@@ -169,26 +169,95 @@ def _geom_to_svg_path(geom):
     return " ".join(parts)
 
 
-def _tube_halo_svg(tube, coords, r, stroke, sw=2):
+# ---------------------------------------------------------------------------
+# Parallel-edge geometry: bend parallel edges into distinct arcs
+# ---------------------------------------------------------------------------
+
+BEND = 20   # perpendicular bend (px) between adjacent parallel edges
+
+
+def _ekey(e):
+    """Canonical key (u, v, k) for an edge [u, v] or [u, v, k]."""
+    u, v = sorted((e[0], e[1]))
+    return (u, v, e[2] if len(e) > 2 else 1)
+
+
+def edge_offsets(edges_raw):
+    """Perpendicular bend (px) for each edge key so parallel edges separate."""
+    groups = {}
+    for e in edges_raw:
+        u, v = sorted((e[0], e[1]))
+        groups.setdefault((u, v), set()).add(_ekey(e))
+    offs = {}
+    for (u, v), keys in groups.items():
+        ks = sorted(keys, key=lambda kk: kk[2])
+        m = len(ks)
+        for j, kk in enumerate(ks):
+            offs[kk] = 0.0 if m == 1 else (j - (m - 1) / 2.0) * BEND
+    return offs
+
+
+def _control_point(pu, pv, off):
+    """Quadratic-Bezier control point giving a mid-arc bend of ~`off` px."""
+    mx, my = (pu[0] + pv[0]) / 2, (pu[1] + pv[1]) / 2
+    dx, dy = pv[0] - pu[0], pv[1] - pu[1]
+    L = math.hypot(dx, dy) or 1.0
+    nx_, ny_ = -dy / L, dx / L
+    return (mx + nx_ * off * 2, my + ny_ * off * 2)
+
+
+def _curve_points(pu, pv, off, n=18):
+    """Sample points along the (possibly bent) edge path — for tube-halo buffering."""
+    if abs(off) < 1e-6:
+        return [pu, pv]
+    cx, cy = _control_point(pu, pv, off)
+    pts = []
+    for i in range(n + 1):
+        t = i / n
+        x = (1 - t) ** 2 * pu[0] + 2 * (1 - t) * t * cx + t ** 2 * pv[0]
+        y = (1 - t) ** 2 * pu[1] + 2 * (1 - t) * t * cy + t ** 2 * pv[1]
+        pts.append((x, y))
+    return pts
+
+
+def _pt_on_curve(pu, pv, off, t):
+    """Point and unit tangent at parameter t along the (bent) edge path."""
+    if abs(off) < 1e-6:
+        dx, dy = pv[0] - pu[0], pv[1] - pu[1]
+        L = math.hypot(dx, dy) or 1.0
+        return (pu[0] + dx * t, pu[1] + dy * t), (dx / L, dy / L)
+    cx, cy = _control_point(pu, pv, off)
+    x = (1 - t) ** 2 * pu[0] + 2 * (1 - t) * t * cx + t ** 2 * pv[0]
+    y = (1 - t) ** 2 * pu[1] + 2 * (1 - t) * t * cy + t ** 2 * pv[1]
+    tx = 2 * (1 - t) * (cx - pu[0]) + 2 * t * (pv[0] - cx)
+    ty = 2 * (1 - t) * (cy - pu[1]) + 2 * t * (pv[1] - cy)
+    L = math.hypot(tx, ty) or 1.0
+    return (x, y), (tx / L, ty / L)
+
+
+def _tube_halo_svg(tube, coords, r, stroke, sw=2, offs=None):
     """
     Return SVG element string for one tube halo outline.
     Uses shapely to compute the union of buffered edges so the halo
     follows the graph shape at a fixed distance — matching Mathematica's
-    RegionDilation approach.
+    RegionDilation approach.  Parallel edges are buffered along their bent arc.
 
-    tube: {"verts": [int,...], "edges": [[u,v],...]}
+    tube: {"verts": [int,...], "edges": [[u,v,k],...]}
     """
     verts = tube["verts"]
     edges = tube["edges"]
+    offs = offs or {}
 
     # Build shapely geometry: buffer each edge (and each isolated vertex)
     shapes = []
     covered_verts = set()
     for edge in edges:
-        u, v = edge
+        u, v = edge[0], edge[1]
         pu, pv = coords.get(u), coords.get(v)
         if pu and pv:
-            shapes.append(LineString([pu, pv]).buffer(r, cap_style=1, join_style=1, resolution=12))
+            off = offs.get(_ekey(edge), 0.0)
+            shapes.append(LineString(_curve_points(pu, pv, off)).buffer(
+                r, cap_style=1, join_style=1, resolution=12))
             covered_verts.add(u)
             covered_verts.add(v)
 
@@ -213,59 +282,48 @@ def _tube_halo_svg(tube, coords, r, stroke, sw=2):
 # Edge decoration rendering
 # ---------------------------------------------------------------------------
 
-def _edge_svg(pu, pv, dec_type, vert_r=VERT_R, edge_w=EDGE_W, color="#334155"):
-    """Return SVG string for one decorated edge, using the given stroke color."""
-    dx = pv[0] - pu[0]
-    dy = pv[1] - pu[1]
-    L = math.sqrt(dx * dx + dy * dy) or 1.0
-    ux, uy = dx / L, dy / L
-    nx_, ny_ = -uy, ux  # perpendicular
+def _edge_svg(pu, pv, dec_type, off=0.0, vert_r=VERT_R, edge_w=EDGE_W, color="#334155"):
+    """Return SVG string for one decorated edge along its (possibly bent) arc."""
+    dx, dy = pv[0] - pu[0], pv[1] - pu[1]
+    L = math.hypot(dx, dy) or 1.0
+    nx_, ny_ = -dy / L, dx / L  # perpendicular to the chord
+    cx, cy = _control_point(pu, pv, off)
+
+    def qp(a, b, c):
+        return f'M {a[0]:.2f},{a[1]:.2f} Q {c[0]:.2f},{c[1]:.2f} {b[0]:.2f},{b[1]:.2f}'
 
     if dec_type == "pinched":
-        off = 3.0
-        return (
-            f'<line x1="{pu[0] + nx_*off:.2f}" y1="{pu[1] + ny_*off:.2f}" '
-            f'x2="{pv[0] + nx_*off:.2f}" y2="{pv[1] + ny_*off:.2f}" '
-            f'stroke="{color}" stroke-width="{edge_w}"/>'
-            f'<line x1="{pu[0] - nx_*off:.2f}" y1="{pu[1] - ny_*off:.2f}" '
-            f'x2="{pv[0] - nx_*off:.2f}" y2="{pv[1] - ny_*off:.2f}" '
-            f'stroke="{color}" stroke-width="{edge_w}"/>'
-        )
+        d3 = 3.0
+        a1, b1, c1 = ((pu[0] + nx_*d3, pu[1] + ny_*d3),
+                      (pv[0] + nx_*d3, pv[1] + ny_*d3),
+                      (cx + nx_*d3, cy + ny_*d3))
+        a2, b2, c2 = ((pu[0] - nx_*d3, pu[1] - ny_*d3),
+                      (pv[0] - nx_*d3, pv[1] - ny_*d3),
+                      (cx - nx_*d3, cy - ny_*d3))
+        return (f'<path d="{qp(a1,b1,c1)}" fill="none" stroke="{color}" stroke-width="{edge_w}"/>'
+                f'<path d="{qp(a2,b2,c2)}" fill="none" stroke="{color}" stroke-width="{edge_w}"/>')
 
     if dec_type == "broken":
-        return (f'<line x1="{pu[0]:.2f}" y1="{pu[1]:.2f}" '
-                f'x2="{pv[0]:.2f}" y2="{pv[1]:.2f}" '
+        return (f'<path d="{qp(pu,pv,(cx,cy))}" fill="none" '
                 f'stroke="{color}" stroke-width="{edge_w}" stroke-dasharray="4 3"/>')
 
     if dec_type in ("oriented_fwd", "oriented_rev"):
-        ax, ay = (pu[0], pu[1]) if dec_type == "oriented_fwd" else (pv[0], pv[1])
-        bx, by = (pv[0], pv[1]) if dec_type == "oriented_fwd" else (pu[0], pu[1])
-        ddx, ddy = bx - ax, by - ay
-        ll = math.sqrt(ddx * ddx + ddy * ddy) or 1.0
-        ux, uy = ddx / ll, ddy / ll
-        pnx, pny = -uy, ux  # perpendicular
-        # Line shortened at both ends to clear vertex circles
-        x1 = ax + ux * vert_r
-        y1 = ay + uy * vert_r
-        x2 = bx - ux * vert_r
-        y2 = by - uy * vert_r
-        # Arrowhead tip at 60% along the edge
-        mx = ax + ddx * 0.6
-        my = ay + ddy * 0.6
+        # arrowhead at the midpoint of the arc, pointing in the edge's direction
+        (mx, my), (tx, ty) = _pt_on_curve(pu, pv, off, 0.5)
+        if dec_type == "oriented_rev":
+            tx, ty = -tx, -ty
+        pnx, pny = -ty, tx
         hsize = max(7, round(vert_r * 0.9))
-        hx = mx - ux * hsize
-        hy = my - uy * hsize
-        pts = (f"{mx:.2f},{my:.2f} "
-               f"{hx + pnx*hsize:.2f},{hy + pny*hsize:.2f} "
-               f"{hx - pnx*hsize:.2f},{hy - pny*hsize:.2f}")
-        return (f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
-                f'stroke="{color}" stroke-width="{edge_w}"/>'
+        tip = (mx + tx * hsize * 0.5, my + ty * hsize * 0.5)
+        bx, by = mx - tx * hsize * 0.5, my - ty * hsize * 0.5
+        pts = (f"{tip[0]:.2f},{tip[1]:.2f} "
+               f"{bx + pnx*hsize*0.6:.2f},{by + pny*hsize*0.6:.2f} "
+               f"{bx - pnx*hsize*0.6:.2f},{by - pny*hsize*0.6:.2f}")
+        return (f'<path d="{qp(pu,pv,(cx,cy))}" fill="none" stroke="{color}" stroke-width="{edge_w}"/>'
                 f'<polygon points="{pts}" fill="{color}"/>')
 
     # Default solid
-    return (f'<line x1="{pu[0]:.2f}" y1="{pu[1]:.2f}" '
-            f'x2="{pv[0]:.2f}" y2="{pv[1]:.2f}" '
-            f'stroke="{color}" stroke-width="{edge_w}"/>')
+    return f'<path d="{qp(pu,pv,(cx,cy))}" fill="none" stroke="{color}" stroke-width="{edge_w}"/>'
 
 
 # ---------------------------------------------------------------------------
@@ -284,10 +342,11 @@ def render_period_svg(vertices, edges_raw, dec_list, tubes, tube_indices, coords
     coords       : dict[int -> (px, py)]  pixel coordinates
     """
     # Compute minimum edge length in pixels so tube radii stay below it.
+    offs = edge_offsets(edges_raw)
     edge_lengths = [
-        math.hypot(coords[u][0] - coords[v][0], coords[u][1] - coords[v][1])
-        for u, v in edges_raw
-        if u in coords and v in coords
+        math.hypot(coords[e[0]][0] - coords[e[1]][0], coords[e[0]][1] - coords[e[1]][1])
+        for e in edges_raw
+        if e[0] in coords and e[1] in coords
     ]
     min_edge_px = min(edge_lengths) if edge_lengths else (CANVAS_W - 2 * PADDING)
     # Scale TUBE_STEP down so the largest tube halo radius < min_edge_px.
@@ -318,10 +377,10 @@ def render_period_svg(vertices, edges_raw, dec_list, tubes, tube_indices, coords
         f'<rect x="{vb_x1:.2f}" y="{vb_y1:.2f}" width="{vb_w:.2f}" height="{vb_h:.2f}" fill="white"/>',
     ]
 
-    # Build decoration lookup
+    # Build decoration lookup (keyed by indexed edge)
     dec_map = {}
     for d in dec_list:
-        dec_map[frozenset(d["edge"])] = d["type"]
+        dec_map[_ekey(d["edge"])] = d["type"]
 
     # Sort tube indices largest-first so bigger halos render behind smaller ones
     sorted_ti = sorted(
@@ -336,17 +395,17 @@ def render_period_svg(vertices, edges_raw, dec_list, tubes, tube_indices, coords
         n_e = len(tube["edges"])
         r = VERT_R + (n_e + 1) * tube_step
         stroke = TUBE_COLORS[ti % len(TUBE_COLORS)]
-        parts.append(_tube_halo_svg(tube, coords, r, stroke))
+        parts.append(_tube_halo_svg(tube, coords, r, stroke, offs=offs))
 
     # Draw edges
     for edge in edges_raw:
-        u, v = edge
+        u, v = edge[0], edge[1]
         pu = coords.get(u)
         pv = coords.get(v)
         if not pu or not pv:
             continue
-        dec_type = dec_map.get(frozenset(edge), "oriented_fwd")
-        parts.append(_edge_svg(pu, pv, dec_type))
+        dec_type = dec_map.get(_ekey(edge), "oriented_fwd")
+        parts.append(_edge_svg(pu, pv, dec_type, off=offs.get(_ekey(edge), 0.0)))
 
     # Draw vertices (circles + labels)
     font_size = max(8, round(VERT_R * 0.9))
@@ -383,12 +442,14 @@ def render_letter_svg(vertices, edges_raw, region_verts, coords, dec_list=None):
                    If None, all edges are drawn as plain lines.
     """
     region_set = frozenset(region_verts)
-    region_edges = {frozenset(e) for e in edges_raw if frozenset(e).issubset(region_set)}
+    offs = edge_offsets(edges_raw)
+    region_edges = {_ekey(e) for e in edges_raw
+                    if frozenset((e[0], e[1])).issubset(region_set)}
 
     dec_map = {}
     if dec_list:
         for d in dec_list:
-            dec_map[frozenset(d["edge"])] = d["type"]
+            dec_map[_ekey(d["edge"])] = d["type"]
 
     # Crop viewBox tightly to graph content. Margin = vertex radius + arrowhead clearance.
     letter_margin = VERT_R + 12
@@ -413,18 +474,19 @@ def render_letter_svg(vertices, edges_raw, region_verts, coords, dec_list=None):
     ]
 
     for edge in edges_raw:
-        u, v = edge
+        u, v = edge[0], edge[1]
         pu = coords.get(u)
         pv = coords.get(v)
         if not pu or not pv:
             continue
-        dec_type = dec_map.get(frozenset(edge), "oriented_fwd")
-        if frozenset(edge) in region_edges:
+        dec_type = dec_map.get(_ekey(edge), "oriented_fwd")
+        off = offs.get(_ekey(edge), 0.0)
+        if _ekey(edge) in region_edges:
             # Region edge: full decoration in orange, slightly thicker
-            parts.append(_edge_svg(pu, pv, dec_type, edge_w=EDGE_W + 1, color="#ea580c"))
+            parts.append(_edge_svg(pu, pv, dec_type, off=off, edge_w=EDGE_W + 1, color="#ea580c"))
         else:
             # Non-region edge: full decoration in faded slate blue
-            parts.append(_edge_svg(pu, pv, dec_type, edge_w=EDGE_W, color="#94a3b8"))
+            parts.append(_edge_svg(pu, pv, dec_type, off=off, edge_w=EDGE_W, color="#94a3b8"))
 
     font_size = max(8, round(VERT_R * 0.9))
     for v in vertices:

@@ -16,6 +16,8 @@ import os
 from itertools import combinations
 
 from coaction import (
+    build_edges,
+    Edge,
     compute_dp, compute_dp_phys, compute_tubings,
     all_decorations, adec_q,
     region_list,
@@ -32,6 +34,17 @@ from coaction import (
     dec_to_json,
 )
 from render_svg import render_period_svg, render_letter_svg, get_coords
+
+
+def _edge_json(e):
+    """Return [u, v, k] for JSON / decoration input, from an Edge or a raw [u,v(,k)] list."""
+    if isinstance(e, Edge):
+        return e.json()
+    u, v = sorted((e[0], e[1]))
+    if len(e) >= 3 and e[2]:
+        return [u, v, e[2]]
+    return [u, v]
+
 
 app = FastAPI(title="FRW Graphical Coaction v2")
 
@@ -102,7 +115,7 @@ def _add_svgs(result, vertices, coords=None):
     """
     tubes = result["tubes"]
     if coords is None:
-        coords = get_coords(vertices, edges_frozensets=[frozenset(e) for e in result["edges"]])
+        coords = get_coords(vertices, edges_frozensets=[frozenset(e[:2]) for e in result["edges"]])
 
     for term in result["terms"]:
         raw_left_signs  = term.get("left_signs",  [])
@@ -172,13 +185,15 @@ def _letter_for_region_latex(dec_list, reg_verts):
     x_parts = [f"X_{{{v}}}" for v in sorted(reg)]
     y_parts = []
     for item in dec_list:
-        u, v = item["edge"]          # u < v always
+        e = item["edge"]
+        u, v = e[0], e[1]            # u < v always
+        kidx = e[2] if len(e) > 2 else 1
         typ  = item["type"]
         u_in, v_in = u in reg, v in reg
         if u_in == v_in or typ == "pinched":
             continue
         lo, hi = min(u, v), max(u, v)
-        y = f"Y_{{{lo},{hi}}}"
+        y = f"Y_{{{lo},{hi}}}" + (f"^{{({kidx})}}" if kidx > 1 else "")
         if typ == "broken":
             y_parts.append(f"+{y}")
         elif typ == "oriented_fwd":  # u→v
@@ -336,7 +351,12 @@ def _tube_poly_lin(tube_idx, tubes_fs, boundaries):
         lin[('x', v)] = lin.get(('x', v), 0) + 1
     for e in bd:
         lo, hi = sorted(e)
-        lin[('Y', lo, hi)] = lin.get(('Y', lo, hi), 0) + 1
+        k = getattr(e, 'k', 1)
+        # v3: an excluded edge with BOTH endpoints inside the tube (a loop /
+        # parallel edge) contributes 2Y — the cosmological-polytope facet doubling.
+        mult = len(e & tv)
+        key = ('Y', lo, hi, k)
+        lin[key] = lin.get(key, 0) + mult
     return lin
 
 
@@ -353,12 +373,13 @@ def _lin_to_terms(lin):
         if key[0] in ('X', 'x'):
             terms.append({"var": key[0], "idx": [key[1]], "coeff": coeff})
         else:
-            terms.append({"var": "Y", "idx": [key[1], key[2]], "coeff": coeff})
+            terms.append({"var": "Y", "idx": [key[1], key[2]], "coeff": coeff,
+                          "k": key[3] if len(key) > 3 else 1})
     # Sort: X/x before Y; within X/x group by (vertex, var) so X_v, x_v appear together
     def _sort_key(t):
         if t["var"] in ("X", "x"):
-            return (0, t["idx"][0], t["var"])
-        return (1, t["idx"][0], t["idx"][1], "")
+            return (0, t["idx"][0], t["var"], 0)
+        return (1, t["idx"][0], t["idx"][1], t.get("k", 1))
     terms.sort(key=_sort_key)
     return terms
 
@@ -468,6 +489,8 @@ def _lincombo_latex(lin):
             var = f"x_{{{k[1]}}}"
         else:
             var = f"Y_{{{k[1]},{k[2]}}}"
+            if len(k) > 3 and k[3] > 1:   # v3: distinguish parallel edges
+                var += f"^{{({k[3]})}}"
         if c == 1:
             parts.append(f"+{var}")
         elif c == -1:
@@ -615,9 +638,9 @@ def _period_integral_tex(g_dec_list, h_dec_list, vertices, edges_raw, tubes_fs, 
 
 def _tubes_and_boundaries(result, vertices, edges_raw):
     """Extract tubes_fs and boundaries from a compute_tubings/compute_dp result."""
-    edges_fs = [frozenset(e) for e in edges_raw]
+    edges_fs = build_edges(edges_raw)
     tubes_fs = [
-        (frozenset(t["verts"]), frozenset(frozenset(e) for e in t["edges"]))
+        (frozenset(t["verts"]), frozenset(build_edges(t["edges"])))
         for t in result["tubes"]
     ]
     boundaries = precompute_boundary(tubes_fs, edges_fs)
@@ -792,7 +815,7 @@ def period_pphys(inp: DecInput):
     coords = get_coords(
         inp.vertices,
         positions_norm=_parse_positions(inp.positions),
-        edges_frozensets=[frozenset(e) for e in inp.edges],
+        edges_frozensets=[frozenset(e[:2]) for e in inp.edges],
     )
     tubes_fs, boundaries = _tubes_and_boundaries(h_result, inp.vertices, inp.edges)
     svg = render_period_svg(inp.vertices, h_result["edges"], h_dec, h_result["tubes"], [], coords)
@@ -836,7 +859,7 @@ def tubings(inp: DecInput):
             result["period_latex"] = []
             return result
 
-    coords = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=[frozenset(e) for e in inp.edges])
+    coords = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=[frozenset(e[:2]) for e in inp.edges])
     tubes = result["tubes"]
 
     result["period_svgs"] = [
@@ -878,7 +901,7 @@ def coaction(inp: CoactionInput):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    coords = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=[frozenset(e) for e in inp.edges])
+    coords = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=[frozenset(e[:2]) for e in inp.edges])
     result = _add_svgs(result, inp.vertices, coords=coords)
 
     # Add period integral LaTeX for click-to-show in each term
@@ -935,18 +958,18 @@ def coaction_phys(inp: CoactionInput):
     coords = get_coords(
         inp.vertices,
         positions_norm=_parse_positions(inp.positions),
-        edges_frozensets=[frozenset(e) for e in inp.edges],
+        edges_frozensets=[frozenset(e[:2]) for e in inp.edges],
     )
     tubes = result["tubes"]
     edges_raw = result["edges"]
 
     # Bare decoration — solid edges, no arrows — represents φ_phys graphically
-    bare_dec = [{"edge": sorted(e), "type": "solid"} for e in edges_raw]
+    bare_dec = [{"edge": _edge_json(e), "type": "solid"} for e in edges_raw]
 
     tubes_fs, boundaries = _tubes_and_boundaries(result, inp.vertices, edges_raw)
 
     # Per-tube SVGs for PgPhysLatex Res subscripts (plain oriented_fwd decoration)
-    plain_dec = [{"edge": sorted(e), "type": "oriented_fwd"} for e in edges_raw]
+    plain_dec = [{"edge": _edge_json(e), "type": "oriented_fwd"} for e in edges_raw]
     tube_svgs = [
         render_period_svg(inp.vertices, edges_raw, plain_dec, tubes, [i], coords)
         for i in range(len(tubes))
@@ -1019,9 +1042,9 @@ def coaction_phys_phys(inp: GraphInput):
     _check_limits(inp.vertices, inp.edges)
     t0 = time.time()
 
-    edges_fs = [frozenset(e) for e in inp.edges]
+    edges_fs = build_edges(inp.edges)
     vertices = list(inp.vertices)
-    edges_json = [sorted(e) for e in edges_fs]
+    edges_json = [e.json() for e in edges_fs]
 
     coords = get_coords(
         inp.vertices,
@@ -1037,17 +1060,17 @@ def coaction_phys_phys(inp: GraphInput):
         for tv, tes in tubes_list
     ]
     # tubes_fs as list of (frozenset, frozenset) for _compute_cut_values etc.
-    tubes_fs = [(frozenset(t["verts"]), frozenset(frozenset(e) for e in t["edges"]))
+    tubes_fs = [(frozenset(t["verts"]), frozenset(build_edges(t["edges"])))
                 for t in tubes_json]
 
     # Per-tube SVGs for PgPhysLatex Res subscripts
-    plain_dec = [{"edge": sorted(e), "type": "oriented_fwd"} for e in edges_fs]
+    plain_dec = [{"edge": _edge_json(e), "type": "oriented_fwd"} for e in edges_fs]
     tube_svgs = [
         render_period_svg(vertices, edges_json, plain_dec, tubes_json, [i], coords)
         for i in range(len(tubes_json))
     ]
 
-    bare_dec = [{"edge": sorted(e), "type": "solid"} for e in edges_fs]
+    bare_dec = [{"edge": _edge_json(e), "type": "solid"} for e in edges_fs]
 
     # Enumerate all acyclic minors
     adec_tube_map = {}
@@ -1139,7 +1162,7 @@ def differential(inp: CoactionInput):
     vertices = result["vertices"]
     edges    = result["edges"]
     tubes    = result["tubes"]
-    coords   = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=[frozenset(e) for e in inp.edges])
+    coords   = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=[frozenset(e[:2]) for e in inp.edges])
 
     h_ncct_count = result.get("h_ncct_count", 1)
 
@@ -1220,15 +1243,15 @@ def discp_phys(inp: CoactionInput):
     coords = get_coords(
         inp.vertices,
         positions_norm=_parse_positions(inp.positions),
-        edges_frozensets=[frozenset(e) for e in inp.edges],
+        edges_frozensets=[frozenset(e[:2]) for e in inp.edges],
     )
 
-    bare_dec = [{"edge": sorted(e), "type": "solid"} for e in edges_raw]
+    bare_dec = [{"edge": _edge_json(e), "type": "solid"} for e in edges_raw]
 
     tubes_fs, boundaries = _tubes_and_boundaries(result, inp.vertices, edges_raw)
 
     # Per-tube SVGs for PgPhysLatex Res subscripts
-    plain_dec = [{"edge": sorted(e), "type": "oriented_fwd"} for e in edges_raw]
+    plain_dec = [{"edge": _edge_json(e), "type": "oriented_fwd"} for e in edges_raw]
     tube_svgs = [
         render_period_svg(inp.vertices, edges_raw, plain_dec, tubes, [i], coords)
         for i in range(len(tubes))
@@ -1318,7 +1341,7 @@ def discontinuity(inp: CoactionInput):
     vertices = result["vertices"]
     edges    = result["edges"]
     tubes    = result["tubes"]
-    coords   = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=[frozenset(e) for e in inp.edges])
+    coords   = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=[frozenset(e[:2]) for e in inp.edges])
 
     discp_terms = []
     for term in result["terms"]:
@@ -1373,7 +1396,7 @@ def phi_phys_form(inp: GraphInput):
       vertices, edges
     """
     _check_limits(inp.vertices, inp.edges)
-    edges_fs = [frozenset(e) for e in inp.edges]
+    edges_fs = build_edges(inp.edges)
     coords = get_coords(
         inp.vertices,
         positions_norm=_parse_positions(inp.positions),
@@ -1381,7 +1404,7 @@ def phi_phys_form(inp: GraphInput):
     )
 
     # Compute tube info for SVG rendering (uses oriented_fwd as neutral decoration)
-    plain_dec = [{"edge": sorted(e), "type": "oriented_fwd"} for e in inp.edges]
+    plain_dec = [{"edge": _edge_json(e), "type": "oriented_fwd"} for e in inp.edges]
     try:
         base_result = compute_tubings(inp.vertices, inp.edges, plain_dec)
     except ValueError as e:
@@ -1391,7 +1414,7 @@ def phi_phys_form(inp: GraphInput):
     edges_raw = base_result["edges"]
 
     # Bare graph SVG: plain undirected solid edges, no tube halos
-    bare_dec = [{"edge": sorted(e), "type": "solid"} for e in inp.edges]
+    bare_dec = [{"edge": _edge_json(e), "type": "solid"} for e in inp.edges]
     graph_svg = render_period_svg(inp.vertices, edges_raw, bare_dec, tubes, [], coords)
 
     tubes_fs, boundaries = _tubes_and_boundaries(base_result, inp.vertices, edges_raw)
@@ -1405,9 +1428,9 @@ def phi_phys_form(inp: GraphInput):
             continue
         n_broken = sum(1 for _, t in dec if t == "broken")
         sign = (-1) ** n_broken
-        dec_list = [{"edge": sorted(e), "type": t} for e, t in dec]
+        dec_list = [{"edge": _edge_json(e), "type": t} for e, t in dec]
         svg = render_period_svg(inp.vertices, edges_raw, dec_list, tubes, [], coords)
-        broken_edges = [sorted(e) for e, t in dec if t == "broken"]
+        broken_edges = [_edge_json(e) for e, t in dec if t == "broken"]
         latex = _phi_form_latex(dec_list, inp.vertices, edges_raw, tubes_fs, boundaries)
         terms.append({
             "sign": sign,
@@ -1437,7 +1460,7 @@ def zonotopes(inp: GraphInput):
     """
     _check_limits(inp.vertices, inp.edges)
 
-    edges = [frozenset(e) for e in inp.edges]
+    edges = build_edges(inp.edges)
     vertices = list(inp.vertices)
 
     # Collect acyclic decorated graphs, binned by their broken-edge subset
@@ -1493,14 +1516,14 @@ def zonotopes(inp: GraphInput):
 
     # SVG for each zonotope: broken edges as "broken", all others as "pinched"
     positions_raw = _parse_positions(inp.positions)
-    coords = get_coords(inp.vertices, positions_raw, frozenset(map(frozenset, inp.edges)))
-    edges_raw = [sorted(list(e)) for e in edges]
+    coords = get_coords(inp.vertices, positions_raw, frozenset(frozenset(e[:2]) for e in inp.edges))
+    edges_raw = [_edge_json(e) for e in edges]
     tubes: list = []
 
     zono_svgs = []
     for broken_sub in all_broken_subs:
         dec_list = [
-            {"edge": sorted(list(e)), "type": "broken" if e in broken_sub else "pinched"}
+            {"edge": _edge_json(e), "type": "broken" if e in broken_sub else "pinched"}
             for e in edges
         ]
         svg = render_period_svg(inp.vertices, edges_raw, dec_list, tubes, [], coords)
@@ -1540,11 +1563,11 @@ def debug_period(inp: DecInput):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    edges_fs = [frozenset(e) for e in result["edges"]]
+    edges_fs = build_edges(result["edges"])
     coords = get_coords(inp.vertices, positions_norm=_parse_positions(inp.positions), edges_frozensets=edges_fs)
 
     tubes_fs = [
-        (frozenset(t["verts"]), frozenset(frozenset(e) for e in t["edges"]))
+        (frozenset(t["verts"]), frozenset(build_edges(t["edges"])))
         for t in result["tubes"]
     ]
     boundaries = precompute_boundary(tubes_fs, edges_fs)

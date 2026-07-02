@@ -6,7 +6,7 @@
  * edges:    [[u,v], ...]
  * decoration: { "u-v": "oriented_fwd"|"oriented_rev"|"pinched"|"broken" }
  */
-import { edgeKey } from "./graphUtils";
+import { edgeKey, withK } from "./graphUtils";
 
 export function adecQ(vertices, edges, decoration) {
   if (vertices.length === 0) return true;
@@ -28,8 +28,8 @@ export function adecQ(vertices, edges, decoration) {
     if (ra !== rb) parent[ra < rb ? rb : ra] = ra < rb ? ra : rb;
   }
 
-  edges.forEach(([u, v]) => {
-    const key = edgeKey(u, v);
+  withK(edges).forEach(([u, v, k]) => {
+    const key = edgeKey(u, v, k);
     if ((decoration[key] || "oriented_fwd") === "pinched") {
       union(u, v);
     }
@@ -45,8 +45,8 @@ export function adecQ(vertices, edges, decoration) {
   const adj = {};
   nodes.forEach((n) => { inDegree[n] = 0; adj[n] = []; });
 
-  for (const [u, v] of edges) {
-    const key = edgeKey(u, v);
+  for (const [u, v, k] of withK(edges)) {
+    const key = edgeKey(u, v, k);
     const type = decoration[key] || "oriented_fwd";
     if (type !== "oriented_fwd" && type !== "oriented_rev") continue;
     const cu = nodeMap[u], cv = nodeMap[v];
