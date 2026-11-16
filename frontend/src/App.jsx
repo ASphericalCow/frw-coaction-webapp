@@ -448,6 +448,9 @@ function normalizedHorizontalLayout(vertices, edges) {
 }
 
 function autoLayout(vertices, edges) {
+  // 2-vertex graphs (bubble/sunrise/banana) lay out side-by-side, not stacked,
+  // so the graphic is wide (fits the result cards) and the tube halos stay small.
+  if (vertices.length <= 2) return normalizedHorizontalLayout(vertices, edges);
   return pathOrder(vertices, edges)
     ? normalizedHorizontalLayout(vertices, edges)
     : normalizedCircleLayout(vertices);

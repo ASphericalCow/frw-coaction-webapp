@@ -145,15 +145,20 @@ def _add_svgs(result, vertices, coords=None):
     return result
 
 
+def _edge_obj(e):
+    """Build an Edge (frozenset {u,v} with parallel index k) from [u,v] or [u,v,k]."""
+    return Edge((e[0], e[1]), e[2] if len(e) > 2 else 1)
+
+
 def _dec_to_tuples(dec_list):
-    """Convert JSON dec list to (frozenset, type) tuples for coaction functions."""
-    return [(frozenset(d["edge"]), d["type"]) for d in dec_list]
+    """Convert JSON dec list to (Edge, type) tuples for coaction functions."""
+    return [(_edge_obj(d["edge"]), d["type"]) for d in dec_list]
 
 
 def _dec_equal(dec_a, dec_b):
     """Order-independent comparison of two decoration lists."""
     def _key(d):
-        return (frozenset(d["edge"]), d["type"])
+        return (_edge_obj(d["edge"]), d["type"])
     return frozenset(_key(d) for d in dec_a) == frozenset(_key(d) for d in dec_b)
 
 

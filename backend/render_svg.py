@@ -124,7 +124,11 @@ def get_coords(vertices, positions_norm=None, edges_frozensets=None):
       3. Circle layout otherwise
     """
     if positions_norm is None:
-        if edges_frozensets is not None and _path_order(vertices, edges_frozensets) is not None:
+        # 2-vertex graphs (bubble/sunrise/banana) lay out side-by-side, not stacked,
+        # so the graphic is wide and the tube halos stay within the canvas.
+        if len(vertices) == 2:
+            positions_norm = horizontal_layout_norm(vertices, edges_frozensets or [])
+        elif edges_frozensets is not None and _path_order(vertices, edges_frozensets) is not None:
             positions_norm = horizontal_layout_norm(vertices, edges_frozensets)
         else:
             positions_norm = circle_layout_norm(vertices)

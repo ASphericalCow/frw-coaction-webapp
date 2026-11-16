@@ -107,8 +107,16 @@ export default function GraphMini({ dec, vertices, edges, tubeIndices, tubes, po
   const edgeOff = {};
   withK(edges).forEach(([u, v, k], i) => { edgeOff[edgeKey(u, v, k)] = offs[i]; });
 
+  // Pad the viewBox by the largest halo ring so tube outlines never clip the frame.
+  const maxTubeVerts = (tubeIndices && tubes && tubeIndices.length)
+    ? Math.max(...tubeIndices.map((ti) => tubes[ti].verts.length))
+    : 1;
+  const PAD = R + 8 + maxTubeVerts * 5;
+
   return (
-    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="graph-mini" overflow="visible">
+    <svg width={SIZE} height={SIZE}
+         viewBox={`${-PAD} ${-PAD} ${SIZE + 2 * PAD} ${SIZE + 2 * PAD}`}
+         className="graph-mini" overflow="visible">
       {tubeIndices && tubes && (() => {
         const sorted = [...tubeIndices].sort(
           (a, b) => tubes[b].verts.length - tubes[a].verts.length
