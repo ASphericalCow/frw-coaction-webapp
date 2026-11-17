@@ -184,6 +184,7 @@ def _letter_for_region_latex(dec_list, reg_verts):
         oriented u→v with u in R, v outside:  +Y_{min,max}
         oriented u→v with v in R, u outside:  -Y_{min,max}
         broken with one endpoint in R:        +Y_{min,max} (both signs positive)
+        broken with both endpoints in R:      +2Y_{min,max}
         pinched: 0
     """
     reg = frozenset(reg_verts)
@@ -195,10 +196,16 @@ def _letter_for_region_latex(dec_list, reg_verts):
         kidx = e[2] if len(e) > 2 else 1
         typ  = item["type"]
         u_in, v_in = u in reg, v in reg
-        if u_in == v_in or typ == "pinched":
+        if typ == "pinched" or not (u_in or v_in):
             continue
         lo, hi = min(u, v), max(u, v)
         y = f"Y_{{{lo},{hi}}}" + (f"^{{({kidx})}}" if kidx > 1 else "")
+        if u_in and v_in:
+            # both ends in R: only a broken edge can be here; the tube that bounds R
+            # crosses it twice, so it counts 2Y (as in the tube polynomial)
+            if typ == "broken":
+                y_parts.append(f"+2{y}")
+            continue
         if typ == "broken":
             y_parts.append(f"+{y}")
         elif typ == "oriented_fwd":  # u→v
